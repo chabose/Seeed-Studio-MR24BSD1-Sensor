@@ -26,6 +26,7 @@
 #define SCENARIO 0x03           //Scenario evaluation
 #define SLEEP_TIME 0x04         //Duration parameters
 #define SLEEP_QUALITY 0x05      //Sleep quality
+#define HEART_RATE 0x06         // Sleep quality
 
 #define BREATH_RATE 0x01        //Breathing rate
 #define CHECK_SIGN 0x04         //Detection signal
@@ -53,22 +54,86 @@
 
 #define SLEEP_SCORE 0x01        //Sleep quality score
 
+#define HEART_RATE_VALUE 0x01         //Heart rate
+
+enum SleepInfoType
+{
+    BreathRateInfo,
+    CheckSignInfo,
+    CloseAwayBedInfo,
+    SleepStateInfo,
+    SleepScoreInfo,
+    SleepTimeInfo,
+    HeartRateInfo,
+    UnknownInfo
+};
+
+enum SleepTimeType
+{
+    AwakeTime,
+    LightSleepTime,
+    DeepSleepTime
+};
+
+enum SleepState
+{
+    Awake,
+    LightSleep,
+    DeepSleep,
+    SleepNull
+};
+
+enum BreathState
+{
+    BreathHold,
+    BreathNull,
+    BreathNormal,
+    BreathMove,
+    BreathRapid
+};
+
+enum BedState
+{
+    AwayBed,
+    CloseBed
+};
+
+struct SleepTime
+{
+    SleepTimeType type;
+    int time;
+};
+
 class SleepBreathingRadar{
     private:
         
     public:
+        Stream *mySerial;
         const byte MsgLen = 12;
         byte dataLen = 12;
         byte Msg[12];
         boolean newData = false;
-        void SerialInit();
+        void SerialInit(Stream &serial);
         void recvRadarBytes();
         void Bodysign_judgment(byte inf[], float Move_min, float Move_max);
         void Situation_judgment(byte inf[]);
         void Sleep_inf(byte inf[]);
         void SleepTimeCalculate(unsigned char inf1, unsigned char inf2, unsigned char inf3, unsigned char inf4);
+        unsigned int GetCalculatedSleepTime(unsigned char inf1, unsigned char inf2, unsigned char inf3, unsigned char inf4);
         void ShowData(byte inf[]);
         unsigned short int us_CalculateCrc16(unsigned char *lpuc_Frame, unsigned short int lus_Len);
+        SleepInfoType GetSleepInfoType(byte inf[]);
+        int GetBreathRateInfo(byte inf[]);
+        BreathState GetCheckSign(byte inf[]);
+        BedState GetCloseAwayBed(byte inf[]);
+        SleepState GetSleepState(byte inf[]);
+        int GetSleepScore(byte inf[]);
+        SleepTime GetSleepTime(byte inf[]);
+        int GetHeartRate(byte inf[]);
 };
+
+        
+
+
 
 #endif

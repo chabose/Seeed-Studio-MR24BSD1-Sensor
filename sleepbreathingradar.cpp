@@ -7,8 +7,9 @@
     #define Serial1 SSerial
 #endif
 
-void SleepBreathingRadar::SerialInit(){
-  Serial1.begin(9600);
+void SleepBreathingRadar::SerialInit(Stream &serial)
+{
+  mySerial = &serial;
 }
 
 // Receive data and process
@@ -17,23 +18,29 @@ void SleepBreathingRadar::recvRadarBytes(){
   static byte ndx = 0;
   byte startMarker = MESSAGE_HEAD;            //Header frame
   byte rb; // Each frame received
-  while (Serial1.available() > 0 && newData == false) {
-      rb = Serial1.read();
-      if (recvInProgress == true) {           //Received header frame
-          if (dataLen > ndx) {                //Length in range
-            Msg[ndx] = rb;
-            if(ndx == 0)dataLen = Msg[0];     //Get length frame
-            ndx++;
-          }
-          else {                              //Ending the information acquisition of a set of data
-              recvInProgress = false;
-              ndx = 0;
-              newData = true;
-          }
+  while (mySerial->available() > 0 && newData == false)
+  {
+    rb = mySerial->read();
+    if (recvInProgress == true)
+    { // Received header frame
+      if (dataLen > ndx)
+      { // Length in range
+        Msg[ndx] = rb;
+        if (ndx == 0)
+          dataLen = Msg[0]; // Get length frame
+        ndx++;
       }
-      else if (rb == startMarker) {           //Waiting for the first frame to arrive
-          recvInProgress = true;
+      else
+      { // Ending the information acquisition of a set of data
+        recvInProgress = false;
+        ndx = 0;
+        newData = true;
       }
+    }
+    else if (rb == startMarker)
+    { // Waiting for the first frame to arrive
+      recvInProgress = true;
+    }
   }
 }
 
@@ -293,17 +300,183 @@ void SleepBreathingRadar::Sleep_inf(byte inf[]){
               break;
           }
           break;
+        case HEART_RATE:
+          switch (inf[5])
+          {
+          case HEART_RATE_VALUE:
+            Serial.print("The current detected heart rate is: ");
+            Serial.println(inf[6]);
+            break;
+          }
+          break;
       }
       Serial.println("----------------------------");
       break;
   }
 }
 
+
+SleepInfoType SleepBreathingRadar::GetSleepInfoType(byte inf[])
+{
+  if (inf[3] == SLEEP_INF)
+  {
+    switch(inf[4]){
+      case BREATH:
+        if (inf[5] == BREATH_RATE)
+        {
+          return BreathRateInfo;
+        }
+        else if (inf[5] == CHECK_SIGN)
+        {
+          return CheckSignInfo;
+        }
+      case SCENARIO:
+        if (inf[5] == CLOSE_AWAY_BED)
+        {
+          return CloseAwayBedInfo;
+        }
+        else if (inf[5] == SLEEP_STATE)
+        {
+          return SleepStateInfo;
+        }
+      case SLEEP_TIME:
+        return SleepTimeInfo;
+      case SLEEP_QUALITY:
+        return SleepScoreInfo;
+      case HEART_RATE:
+        return HeartRateInfo;
+      default:
+        return UnknownInfo;
+    }
+  }
+}
+
+//Sleep time decoding
+int SleepBreathingRadar::GetBreathRateInfo(byte inf[])
+{
+  if (inf[3] == SLEEP_INF && inf[4] == BREATH && inf[5] == BREATH_RATE)
+  {
+    return inf[6];
+  }else{
+    throw std::invalid_argument("Invalid input");
+  }
+}
+
+BreathState SleepBreathingRadar::GetCheckSign(byte inf[])
+{
+  if (inf[3] == SLEEP_INF && inf[4] == BREATH && inf[5] == CHECK_SIGN)
+  {
+    switch (inf[6])
+    {
+    case BREATH_HOLD:
+      return BreathHold;
+    case BREATH_NULL:
+      return BreathNull;
+    case BREATH_NORMAL:
+      return BreathNormal;
+    case BREATH_MOVE:
+      return BreathMove;
+    case BREATH_RAPID:
+      return BreathRapid;
+    }
+  }else{
+    throw std::invalid_argument("Invalid input");
+  }
+}
+
+BedState SleepBreathingRadar::GetCloseAwayBed(byte inf[])
+{
+  if (inf[3] == SLEEP_INF && inf[4] == SCENARIO && inf[5] == CLOSE_AWAY_BED)
+  {
+    switch (inf[6])
+    {
+    case AWAY_BED:
+      return AwayBed;
+    case CLOSE_BED:
+      return CloseBed;
+    }
+  }else{
+    throw std::invalid_argument("Invalid input");
+  }
+}
+
+SleepState SleepBreathingRadar::GetSleepState(byte inf[])
+{
+  if (inf[3] == SLEEP_INF && inf[4] == SCENARIO && inf[5] == SLEEP_STATE)
+  {
+    switch (inf[6])
+    {
+    case AWAKE:
+      return Awake;
+    case LIGHT_SLEEP:
+      return LightSleep;
+    case DEEP_SLEEP:
+      return DeepSleep;
+    case SLEEP_NULL:
+      return SleepNull;
+    }
+  }else{
+    throw std::invalid_argument("Invalid input");
+  }
+}
+
+int SleepBreathingRadar::GetSleepScore(byte inf[])
+{
+  if (inf[3] == SLEEP_INF && inf[4] == SLEEP_QUALITY && inf[5] == SLEEP_SCORE)
+  {
+    return inf[6];
+  }else{
+    throw std::invalid_argument("Invalid input");
+ }
+}
+
+ SleepTime SleepBreathingRadar::GetSleepTime(byte inf[])
+{
+  SleepTime sleepTime = {AwakeTime, 0};
+  if (inf[3] == SLEEP_INF && inf[4] == SLEEP_TIME)
+  {
+    switch (inf[5])
+    {
+    case AWAKE_TIME:
+      sleepTime.type = AwakeTime;
+      break;
+    case LIGHT_SLEEP_TIME:
+      sleepTime.type = LightSleepTime;
+      break;
+    case DEEP_SLEEP_TIME:
+      sleepTime.type = DeepSleepTime;
+      break;
+    }
+    sleepTime.time = GetCalculatedSleepTime(inf[6], inf[7], inf[8], inf[9]);
+    return sleepTime;
+  }else{
+    throw std::invalid_argument("Invalid input");
+  }
+}
+
+int SleepBreathingRadar::GetHeartRate(byte inf[])
+{
+  if (inf[3] == SLEEP_INF && inf[4] == HEART_RATE && inf[5] == HEART_RATE_VALUE)
+  {
+    return inf[6];
+  }else{
+    throw std::invalid_argument("Invalid input");
+  }
+}
+
+
 //Sleep time decoding
 void SleepBreathingRadar::SleepTimeCalculate(unsigned char inf1, unsigned char inf2, unsigned char inf3, unsigned char inf4){
   unsigned int rel = 0;
   rel = (inf1 <<  24)+(inf2 << 16 )+(inf3 << 8)+(inf4);
   Serial.println(rel);
+}
+
+unsigned int SleepBreathingRadar::GetCalculatedSleepTime(unsigned char inf1, unsigned char inf2, unsigned char inf3, unsigned char inf4)
+{
+  unsigned int rel = 0;
+  rel = (inf1 << 24) + (inf2 << 16) + (inf3 << 8) + (inf4);
+  return rel;
 }
 
 //Radar transmits data frames for display via serial port
